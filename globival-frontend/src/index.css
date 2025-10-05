@@ -1,0 +1,274 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Base colors */
+    --background: oklch(1 0 0);
+    --foreground: oklch(0.145 0 0);
+    --card: oklch(1 0 0);
+    --card-foreground: oklch(0.145 0 0);
+    --popover: oklch(1 0 0);
+    --popover-foreground: oklch(0.145 0 0);
+
+    /* Brand colors */
+    --primary: rgb(237 125 160); /* Brand pink from logo */
+    --primary-foreground: rgb(255 255 255); /* White text on brand backgrounds */
+    --secondary: oklch(0.95 0.05 85);
+    --secondary-foreground: oklch(0.145 0 0);
+
+    /* Gift store colors */
+    --gift-gold: oklch(0.8 0.12 75);
+    --gift-rose: rgb(237 125 160); /* Match brand */
+    --gift-yellow: oklch(0.85 0.12 95);
+    --gift-accent: rgb(255 230 238); /* Light pink accent */
+
+    /* UI colors */
+    --muted: oklch(0.97 0 0);
+    --muted-foreground: oklch(0.556 0 0);
+    --accent: rgb(255 230 238); /* Use light pink accent for subtle hovers */
+    --accent-foreground: oklch(0.205 0 0);
+    --destructive: oklch(0.577 0.245 27.325);
+    --destructive-foreground: oklch(0.577 0.245 27.325);
+    --border: oklch(0.922 0 0);
+    --input: oklch(0.922 0 0);
+    --ring: rgb(237 125 160); /* Brand-colored focus ring */
+
+    /* Chart colors */
+    --chart-1: oklch(0.646 0.222 41.116);
+    --chart-2: oklch(0.6 0.118 184.704);
+    --chart-3: oklch(0.398 0.07 227.392);
+    --chart-4: oklch(0.828 0.189 84.429);
+    --chart-5: oklch(0.769 0.188 70.08);
+
+    /* Border radius */
+    --radius: 0.625rem;
+    --radius-sm: calc(var(--radius) - 4px);
+    --radius-md: calc(var(--radius) - 2px);
+    --radius-lg: var(--radius);
+    --radius-xl: calc(var(--radius) + 4px);
+  }
+}
+
+@layer base {
+  :root {
+    /* Sidebar colors */
+    --sidebar: oklch(0.985 0 0);
+    --sidebar-foreground: oklch(0.145 0 0);
+    --sidebar-primary: oklch(0.205 0 0);
+    --sidebar-primary-foreground: oklch(0.985 0 0);
+    --sidebar-accent: oklch(0.97 0 0);
+    --sidebar-accent-foreground: oklch(0.205 0 0);
+    --sidebar-border: oklch(0.922 0 0);
+    --sidebar-ring: oklch(0.708 0 0);
+  }
+}
+
+.dark {
+  /* Base colors - dark mode optimized for OLED */
+  --background: rgb(0 0 0); /* True black for OLED energy efficiency */
+  --foreground: rgb(255 255 255); /* Increased contrast for better readability */
+  --card: rgb(0 0 0); /* True black for cards */
+  --card-foreground: rgb(255 255 255);
+  --popover: rgb(0 0 0);
+  --popover-foreground: rgb(255 255 255);
+
+  /* Brand colors - dark mode enhanced */
+  --primary: rgb(237 125 160); /* Mantenemos el color primario de la marca */
+  --primary-foreground: rgb(255 255 255); /* Texto blanco para contraste */
+  --secondary: rgb(15 15 15); /* Subtle elevated surface */
+  --secondary-foreground: rgb(255 255 255);
+
+  /* Gift store colors - dark mode enhanced */
+  --gift-gold: rgb(255 215 0); /* Brighter gold for OLED */
+  --gift-rose: rgb(237 125 160); /* Mantenemos el color de la marca */
+  --gift-yellow: rgb(255 236 179); /* Brighter yellow */
+  --gift-accent: rgb(255 230 238); /* Mantenemos el acento de la marca */
+
+  /* UI colors - dark mode enhanced */
+  --muted: rgb(18 18 18); /* Slightly lighter for subtle distinction */
+  --muted-foreground: rgb(229 231 235); /* Texto más claro para mejor legibilidad */
+  --accent: rgb(25 25 25); /* Slightly more visible accent for OLED */
+  --accent-foreground: rgb(255 255 255);
+  --destructive: rgb(255 100 100); /* Brighter red for better visibility */
+  --destructive-foreground: rgb(255 255 255);
+  --border: rgb(35 35 35); /* Slightly more visible borders */
+  --input: rgb(35 35 35);
+  --ring: rgb(237 125 160); /* Mantenemos el color de la marca */
+}
+
+@layer components {
+  /* Estilos de componentes aquí */
+}
+
+@layer utilities {
+  /* Utilidades personalizadas aquí */
+}
+
+@theme inline {
+  /* Font variables */
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+
+  /* Color mappings */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* Chart color mappings */
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  /* Sidebar color mappings */
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Gift store color mappings */
+  --color-gift-gold: var(--gift-gold);
+  --color-gift-rose: var(--gift-rose);
+  --color-gift-yellow: var(--gift-yellow);
+  --color-gift-accent: var(--gift-accent);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  /* Smooth theme transition when toggling theme */
+  .theme-transition * {
+    transition: background-color 400ms ease, color 400ms ease,
+                border-color 400ms ease, box-shadow 400ms ease;
+  }
+}
+
+/* Custom utility classes for gift store theme */
+@layer utilities {
+  /* Dark card, section, and subtle UI helpers for OLED */
+  .card-dark {}
+  .border-hairline {}
+  .section-dark {}
+  .overlay-soft {}
+  .dot-neutral {}
+  .dot-neutral-active {}
+
+  /* Logo visibility enhancement for dark mode */
+  .logo-dark-mode {
+    filter: brightness(0) invert(1) drop-shadow(0 0 3px rgba(255, 255, 255, 0.5));
+  }
+
+  /* Transiciones suaves para cambios de tema */
+.transition-theme {
+  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+}
+}
+
+/* Apply overrides scoped to dark root for custom classes */
+.dark .card-dark {
+  background-color: var(--secondary);
+  color: var(--foreground);
+}
+.dark .border-hairline {
+  border-color: var(--border);
+}
+.dark .section-dark {
+  background-color: rgb(10 10 10);
+}
+.dark .overlay-soft {
+  background-color: rgba(255, 255, 255, 0.06);
+}
+.dark .dot-neutral {
+  background-color: rgba(255, 255, 255, 0.35);
+}
+.dark .dot-neutral-active {
+  background-color: var(--gift-rose);
+}
+  /* OLED-friendly header surface with subtle glass effect */
+  .header-oled {
+    background-color: rgba(0, 0, 0, 0.72);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  }
+  @supports (backdrop-filter: blur(12px)) or (-webkit-backdrop-filter: blur(12px)) {
+    .header-oled {
+      backdrop-filter: blur(12px) saturate(140%);
+      -webkit-backdrop-filter: blur(12px) saturate(140%);
+    }
+  }
+  .text-gift-gold {
+    color: var(--color-gift-gold);
+  }
+  .text-gift-rose {
+    color: var(--color-gift-rose);
+  }
+  .text-gift-yellow {
+    color: var(--color-gift-yellow);
+  }
+  .text-gift-accent {
+    color: var(--color-gift-accent);
+  }
+  .bg-gift-gold {
+    background-color: var(--color-gift-gold);
+  }
+  .bg-gift-rose {
+    background-color: var(--color-gift-rose);
+  }
+  .bg-gift-yellow {
+    background-color: var(--color-gift-yellow);
+  }
+  .bg-gift-accent {
+    background-color: var(--color-gift-accent);
+  }
+  .border-gift-gold {
+    border-color: var(--color-gift-gold);
+  }
+  .border-gift-rose {
+    border-color: var(--color-gift-rose);
+  }
+  .border-gift-yellow {
+    border-color: var(--color-gift-yellow);
+  }
+  .border-gift-accent {
+    border-color: var(--color-gift-accent);
+  }
+  .logo-img {
+    height: 4rem; /* h-16 equivalente */
+    width: auto;
+  }
+  /* Added mobile-friendly touch target utilities */
+  .touch-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  .touch-target-large {
+    min-height: 48px;
+    min-width: 48px;
+  }
