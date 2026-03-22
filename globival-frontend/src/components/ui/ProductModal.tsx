@@ -1,300 +1,210 @@
-"use client"
+"use client";
 
-import { useEffect, useState } from "react"
-import styled from "styled-components"
-import { FaTimes, FaWhatsapp } from "react-icons/fa"
-import { productService } from "../../services/api"
-import { IMAGE_BASE_URL } from "../../config/constants"
+import { useEffect } from "react";
+import Image from "next/image";
+import { X, MessageCircle, ShoppingCart, Check } from "lucide-react";
+import { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { buildImageUrl, BLUR_DATA_URL, BUSINESS } from "@/config/constants";
+import { useCart } from "@/contexts/CartContext";
+import type { Product } from "@/types";
+import { getSubCategory } from "@/types";
 
-// Helper para construir URLs de imagen evitando dobles "/storage" y barras
-const buildImageUrl = (path?: string) => {
-  if (!path) return ""
-  if (/^https?:\/\//.test(path)) return path
-  const clean = path.replace(/^\/+/, "")
-  return clean.startsWith("storage/")
-    ? `${IMAGE_BASE_URL}/${clean}`
-    : `${IMAGE_BASE_URL}/storage/${clean}`
+interface ProductModalProps {
+  product: Product | null;
+  isOpen: boolean;
+  onClose: () => void;
 }
 
-const ModalOverlay = styled.div`
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(0, 0, 0, 0.8);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  padding: ${({ theme }) => theme.spacing.lg};
-  backdrop-filter: blur(5px);
-`
-
-const ModalContent = styled.div`
-  /* Fondo limpio y claro, sin degradados rosados */
-  background: #ffffff;
-  border-radius: ${({ theme }) => theme.borderRadius.medium};
-  width: 100%;
-  max-width: 900px;
-  max-height: 90vh;
-  overflow-y: auto;
-  position: relative;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  
-  &::-webkit-scrollbar {
-    width: 8px;
-  }
-  
-  &::-webkit-scrollbar-track {
-    background: ${({ theme }) => theme.colors.dark};
-  }
-  
-  &::-webkit-scrollbar-thumb {
-    background: ${({ theme }) => theme.colors.primary};
-    border-radius: 4px;
-  }
-`
-
-const CloseButton = styled.button`
-  position: absolute;
-  top: ${({ theme }) => theme.spacing.md};
-  right: ${({ theme }) => theme.spacing.md};
-  background: rgba(0, 0, 0, 0.5);
-  color: white;
-  border: none;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  z-index: 10;
-  transition: all ${({ theme }) => theme.transitions.fast};
-  
-  &:hover {
-    background: ${({ theme }) => theme.colors.primary};
-    transform: rotate(90deg);
-  }
-`
-
-const ProductDetails = styled.div`
-  display: grid;
-  grid-template-columns: 1fr;
-  
-  @media (min-width: ${({ theme }) => theme.breakpoints.md}) {
-    grid-template-columns: 1fr 1fr;
-  }
-`
-
-const ProductImage = styled.div`
-  height: 400px;
-  /* Fondo suave neutro para la imagen */
-  background-color: rgba(0, 0, 0, 0.04);
-  
-  img {
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
-  }
-`
-
-const ProductInfo = styled.div`
-  padding: ${({ theme }) => theme.spacing.xl};
-`
-
-const ProductCategory = styled.div`
-  color: ${({ theme }) => theme.colors.primary};
-  font-size: 0.9rem;
-  margin-bottom: ${({ theme }) => theme.spacing.sm};
-  font-weight: 500;
-`
-
-const ProductName = styled.h2`
-  margin-bottom: ${({ theme }) => theme.spacing.md};
-  font-size: 1.8rem;
-`
-
-const ProductPrice = styled.div`
-  display: flex;
-  align-items: center;
-  margin-bottom: ${({ theme }) => theme.spacing.lg};
-  
-  .original {
-    color: ${({ theme }) => theme.colors.textSecondary};
-    text-decoration: line-through;
-    margin-right: ${({ theme }) => theme.spacing.md};
-    font-size: 1.2rem;
-  }
-  
-  .sale {
-    color: ${({ theme }) => theme.colors.primary};
-    font-weight: 600;
-    font-size: 2rem;
-  }
-`
-
-const ProductDescription = styled.div`
-  margin-bottom: ${({ theme }) => theme.spacing.xl};
-  color: ${({ theme }) => theme.colors.textSecondary};
-  line-height: 1.6;
-`
-
-const ActionButtons = styled.div`
-  display: flex;
-  gap: ${({ theme }) => theme.spacing.md};
-  margin-top: ${({ theme }) => theme.spacing.xl};
-  flex-wrap: wrap;
-`
-
-const ActionButton = styled.a`
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: ${({ theme }) => theme.spacing.md} ${({ theme }) => theme.spacing.xl};
-  background: ${({ theme, primary }) => (primary ? theme.colors.primary : "transparent")};
-  color: ${({ theme }) => theme.colors.textPrimary};
-  border: ${({ theme, primary }) => (primary ? "none" : `1px solid ${theme.colors.border}`)};
-  border-radius: ${({ theme }) => theme.borderRadius.medium};
-  font-weight: 600;
-  cursor: pointer;
-  transition: all ${({ theme }) => theme.transitions.fast};
-  text-decoration: none;
-  
-  &:hover {
-    /* Evitamos el rojo/rosa en hover; usamos la marca sutilmente */
-    background: ${({ theme, primary }) => (primary ? theme.colors.primary : "rgba(0, 0, 0, 0.06)")};
-    transform: translateY(-2px);
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
-    filter: ${({ primary }) => (primary ? "brightness(0.95)" : "none")};
-  }
-  
-  svg {
-    margin-right: ${({ theme }) => theme.spacing.sm};
-  }
-`
-
-const ProductModal = ({ productId, onClose }) => {
-  const [product, setProduct] = useState(null)
-  const [loading, setLoading] = useState(true)
+export default function ProductModal({
+  product,
+  isOpen,
+  onClose,
+}: ProductModalProps) {
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [isOpen]);
 
   useEffect(() => {
-    const fetchProduct = async () => {
-      try {
-        const response = await productService.getById(productId)
-        setProduct(response.data)
-        setLoading(false)
-      } catch (error) {
-        console.error("Error al cargar producto:", error)
-        setLoading(false)
-      }
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    if (isOpen) {
+      window.addEventListener("keydown", handleEscape);
     }
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [isOpen, onClose]);
 
-    if (productId) {
-      fetchProduct()
-    }
-  }, [productId])
+  const cart = useCart();
+  const [addedToCart, setAddedToCart] = useState(false);
 
-  // Función para generar el mensaje de WhatsApp
-  const generateWhatsAppMessage = () => {
-    if (!product) return ""
-    const message = `Hola, estoy interesado en el producto "${product.name}" que vi en Globival & Detalles. ¿Podrías darme más información?`
-    return `https://wa.me/51997745679?text=${encodeURIComponent(message)}`
-  }
+  const handleAddToCart = () => {
+    if (!product) return;
+    cart.addProduct(product);
+    setAddedToCart(true);
+    setTimeout(() => setAddedToCart(false), 2000);
+  };
 
-  // Cerrar el modal al hacer clic en el overlay
-  const handleOverlayClick = (e) => {
-    if (e.target === e.currentTarget) {
-      onClose()
-    }
-  }
+  if (!product) return null;
 
-  // Cerrar el modal al presionar Escape
-  useEffect(() => {
-    const handleEscKey = (e) => {
-      if (e.key === "Escape") {
-        onClose()
-      }
-    }
-
-    window.addEventListener("keydown", handleEscKey)
-    return () => window.removeEventListener("keydown", handleEscKey)
-  }, [onClose])
-
-  if (loading) {
-    return (
-      <ModalOverlay onClick={handleOverlayClick}>
-        <ModalContent>
-          <CloseButton onClick={onClose}>
-            <FaTimes />
-          </CloseButton>
-          <div style={{ padding: "2rem", textAlign: "center" }}>Cargando producto...</div>
-        </ModalContent>
-      </ModalOverlay>
-    )
-  }
-
-  if (!product) {
-    return (
-      <ModalOverlay onClick={handleOverlayClick}>
-        <ModalContent>
-          <CloseButton onClick={onClose}>
-            <FaTimes />
-          </CloseButton>
-          <div style={{ padding: "2rem", textAlign: "center" }}>Producto no encontrado</div>
-        </ModalContent>
-      </ModalOverlay>
-    )
-  }
+  const hasOffer =
+    product.precio_de_oferta !== null && product.precio_de_oferta !== "";
+  const whatsappUrl = BUSINESS.whatsappUrl(
+    `Hola, me interesa el producto: ${product.name} (SKU: ${product.SKU}). Precio: S/${hasOffer ? product.precio_de_oferta : product.price}`,
+  );
 
   return (
-    <ModalOverlay onClick={handleOverlayClick}>
-      <ModalContent>
-        <CloseButton onClick={onClose}>
-          <FaTimes />
-        </CloseButton>
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+        >
+          {/* Overlay */}
+          <motion.div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={onClose}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          />
 
-        <ProductDetails>
-          <ProductImage>
-            <img
-              src={
-                buildImageUrl(product.imagen) || "/images/product-placeholder.jpg"
-              }
-              alt={product.name}
-            />
-          </ProductImage>
+          {/* Modal */}
+          <motion.div
+            className="relative z-10 w-full max-w-2xl overflow-hidden rounded-2xl bg-background shadow-2xl"
+            initial={{ scale: 0.9, opacity: 0, y: 20 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            exit={{ scale: 0.9, opacity: 0, y: 20 }}
+            transition={{ type: "spring", damping: 25, stiffness: 300 }}
+          >
+            {/* Close button */}
+            <button
+              onClick={onClose}
+              className="absolute right-3 top-3 z-20 rounded-full bg-background/80 p-2 text-foreground/60 backdrop-blur-sm transition-colors hover:bg-background hover:text-foreground"
+              aria-label="Cerrar"
+            >
+              <X size={20} />
+            </button>
 
-          <ProductInfo>
-            <ProductCategory>{product.subCategory?.name || "Categoría"}</ProductCategory>
-            <ProductName>{product.name}</ProductName>
-            <ProductPrice>
-              {product.precio_de_oferta ? (
-                <>
-                  <span className="original">S/ {product.price}</span>
-                  <span className="sale">S/ {product.precio_de_oferta}</span>
-                </>
-              ) : (
-                <span className="sale">S/ {product.price}</span>
-              )}
-            </ProductPrice>
+            <div className="flex flex-col md:flex-row">
+              {/* Image */}
+              <div className="relative aspect-square w-full bg-muted md:w-1/2">
+                <Image
+                  src={buildImageUrl(product.imagen)}
+                  alt={product.name}
+                  fill
+                  className="object-cover"
+                  sizes="(max-width: 768px) 100vw, 50vw"
+                  placeholder="blur"
+                  blurDataURL={BLUR_DATA_URL}
+                />
+                {hasOffer && (
+                  <span className="absolute left-3 top-3 rounded-full bg-primary px-3 py-1 text-xs font-bold text-white">
+                    OFERTA
+                  </span>
+                )}
+              </div>
 
-            <ProductDescription>
-              <p>{product.description || "Sin descripción disponible."}</p>
-            </ProductDescription>
+              {/* Details */}
+              <div className="flex flex-1 flex-col justify-between p-6">
+                <div>
+                  <h2 className="text-2xl font-bold text-foreground">
+                    {product.name}
+                  </h2>
 
-            <ActionButtons>
-              <ActionButton href={`/producto/${product.id}`}>Ver detalle completo</ActionButton>
-              <ActionButton href={generateWhatsAppMessage()} target="_blank" rel="noopener noreferrer" primary={true}>
-                <FaWhatsapp /> Contactar
-              </ActionButton>
-            </ActionButtons>
-          </ProductInfo>
-        </ProductDetails>
-      </ModalContent>
-    </ModalOverlay>
-  )
+                  {getSubCategory(product) && (
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {getSubCategory(product)?.category?.name} /{" "}
+                      {getSubCategory(product)?.name}
+                    </p>
+                  )}
+
+                  <p className="mt-4 text-sm leading-relaxed text-foreground/80">
+                    {product.description}
+                  </p>
+
+                  <div className="mt-4 flex items-baseline gap-3">
+                    {hasOffer ? (
+                      <>
+                        <span className="text-2xl font-bold text-primary">
+                          S/{product.precio_de_oferta}
+                        </span>
+                        <span className="text-lg text-muted-foreground line-through">
+                          S/{product.price}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-2xl font-bold text-foreground">
+                        S/{product.price}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap gap-3 text-sm text-muted-foreground">
+                    <span>SKU: {product.SKU}</span>
+                    <span>
+                      Stock:{" "}
+                      <span
+                        className={
+                          product.stock > 0 ? "text-success" : "text-destructive"
+                        }
+                      >
+                        {product.stock > 0
+                          ? `${product.stock} disponibles`
+                          : "Agotado"}
+                      </span>
+                    </span>
+                  </div>
+                </div>
+
+                {/* Action buttons */}
+                <div className="mt-6 flex flex-col gap-2.5">
+                  {product.stock > 0 && (
+                    <button
+                      onClick={handleAddToCart}
+                      className={`flex items-center justify-center gap-2 rounded-xl px-6 py-3 font-semibold transition-all ${
+                        addedToCart
+                          ? "bg-success text-success-foreground"
+                          : "bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98]"
+                      }`}
+                    >
+                      {addedToCart ? (
+                        <>
+                          <Check size={20} />
+                          Agregado al carrito
+                        </>
+                      ) : (
+                        <>
+                          <ShoppingCart size={20} />
+                          Agregar al carrito
+                        </>
+                      )}
+                    </button>
+                  )}
+                  <a
+                    href={whatsappUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-2 rounded-xl bg-whatsapp px-6 py-3 font-semibold text-white transition-colors hover:bg-whatsapp/90 active:scale-[0.98]"
+                  >
+                    <MessageCircle size={20} />
+                    Consultar por WhatsApp
+                  </a>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
 }
-
-export default ProductModal

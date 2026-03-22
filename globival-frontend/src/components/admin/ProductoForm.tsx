@@ -1,555 +1,647 @@
-import React, { useState, useEffect } from 'react'
-import { useFormik } from 'formik'
-import * as Yup from 'yup'
-import { 
-  FaBox, 
-  FaTag, 
-  FaDollarSign, 
-  FaImage, 
-  FaArrowLeft, 
-  FaArrowRight, 
-  FaCheck,
-  FaInfoCircle,
-  FaUpload,
-  FaTrash
-} from 'react-icons/fa'
-import { IMAGE_BASE_URL } from '../../config/constants'
+"use client";
 
-// Helper para construir URLs de imagen
-const buildImageUrl = (path?: string) => {
-  if (!path) return ""
-  if (/^https?:\/\//.test(path)) return path
-  const clean = path.replace(/^\/+/, "")
-  return clean.startsWith("storage/")
-    ? `${IMAGE_BASE_URL}/${clean}`
-    : `${IMAGE_BASE_URL}/storage/${clean}`
-}
+import { useEffect, useRef, useState, useMemo } from "react";
+import { useFormik } from "formik";
+import * as Yup from "yup";
+import Image from "next/image";
+import { X, Upload, ImagePlus, Trash2, Sparkles } from "lucide-react";
+import { toast } from "react-toastify";
+import { buildImageUrl, validateImageFile } from "@/config/constants";
+import { productService } from "@/services/api";
+import type { Product, SubCategory, Category } from "@/types";
 
-interface Product {
-  id: number;
+interface ProductoFormValues {
   name: string;
+  price: string;
   description: string;
-  price: number;
-  precio_de_oferta?: number;
-  stock: number;
-  imagen?: string;
-  subCategory?: {
-    id: number;
-    name: string;
-  };
-}
-
-interface Subcategory {
-  id: number;
-  name: string;
-  categoryId: number;
-  category?: {
-    id: number;
-    name: string;
-  };
+  sub_category_id: number | "";
+  precio_de_oferta: string;
+  stock: number | "";
+  SKU: string;
+  imagen: File | null;
 }
 
 interface ProductoFormProps {
-  product?: Product | null;
-  subcategories: Subcategory[];
-  onSave: (formData: FormData) => Promise<void>;
-  onCancel: () => void;
-  isSubmitting?: boolean;
+  isOpen: boolean;
+  onClose: () => void;
+  onSubmit: (formData: FormData) => void | Promise<void>;
+  initialData?: Product | null;
+  subcategories: SubCategory[];
+}
+
+function generateSKU(name: string): string {
+  const clean = name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9\s]/g, "")
+    .trim()
+    .toUpperCase();
+  const words = clean.split(/\s+/).filter(Boolean);
+  const prefix =
+    words.length >= 2
+      ? words
+          .slice(0, 3)
+          .map((w) => w.slice(0, 3))
+          .join("-")
+      : clean.slice(0, 8);
+  const num = String(Math.floor(Math.random() * 900) + 100);
+  return `${prefix}-${num}`;
 }
 
 const validationSchema = Yup.object({
-  name: Yup.string().required("El nombre es requerido"),
-  description: Yup.string().required("La descripción es requerida"),
+  name: Yup.string()
+    .required("El nombre es requerido")
+    .max(255, "Máximo 255 caracteres"),
   price: Yup.number()
     .required("El precio es requerido")
-    .positive("El precio debe ser positivo"),
+    .min(0, "El precio no puede ser negativo")
+    .typeError("Ingrese un número válido"),
+  description: Yup.string(),
+  sub_category_id: Yup.number()
+    .required("La subcategoría es requerida")
+    .min(1, "Seleccione una subcategoría"),
   precio_de_oferta: Yup.number()
-    .positive("El precio de oferta debe ser positivo")
-    .test("less-than-price", "El precio de oferta debe ser menor al precio normal", function (value) {
-      const { price } = this.parent;
-      if (value && price && value >= price) {
-        return false;
-      }
-      return true;
-    }),
+    .nullable()
+    .min(0, "No puede ser negativo")
+    .transform((v, orig) => (orig === "" ? undefined : v)),
   stock: Yup.number()
     .required("El stock es requerido")
-    .integer("El stock debe ser un número entero")
-    .min(0, "El stock no puede ser negativo"),
-  subCategoryId: Yup.number().required("La subcategoría es requerida"),
-})
+    .min(0, "No puede ser negativo")
+    .integer("Debe ser un número entero"),
+  SKU: Yup.string().max(50, "Máximo 50 caracteres"),
+});
 
-const ProductoForm = ({ product, subcategories, onSave, onCancel, isSubmitting = false }: ProductoFormProps) => {
-  const [currentStep, setCurrentStep] = useState(1)
-  const [imagePreview, setImagePreview] = useState<string | null>(null)
-  const totalSteps = 4
+export default function ProductoForm({
+  isOpen,
+  onClose,
+  onSubmit,
+  initialData,
+  subcategories,
+}: ProductoFormProps) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const extraFilesRef = useRef<HTMLInputElement>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [extraImages, setExtraImages] = useState<
+    { file: File; preview: string }[]
+  >([]);
+  const [imagesToDelete, setImagesToDelete] = useState<number[]>([]);
 
-  const steps = [
-    { id: 1, title: 'Información Básica', icon: <FaInfoCircle /> },
-    { id: 2, title: 'Categorización', icon: <FaTag /> },
-    { id: 3, title: 'Precios y Stock', icon: <FaDollarSign /> },
-    { id: 4, title: 'Imagen', icon: <FaImage /> }
-  ]
+  // Group subcategories by category for the select
+  const groupedSubcategories = useMemo(() => {
+    const groups: Record<string, { category: Category; subs: SubCategory[] }> =
+      {};
+    for (const sub of subcategories) {
+      const catName = sub.category?.name || "Sin categoría";
+      const catId = sub.category?.id || 0;
+      if (!groups[catName]) {
+        groups[catName] = {
+          category: sub.category || { id: catId, name: catName, created_at: "", updated_at: "" },
+          subs: [],
+        };
+      }
+      groups[catName].subs.push(sub);
+    }
+    return Object.values(groups).sort((a, b) =>
+      a.category.name.localeCompare(b.category.name),
+    );
+  }, [subcategories]);
 
-  const formik = useFormik({
+  const formik = useFormik<ProductoFormValues>({
     initialValues: {
-      name: product?.name || "",
-      description: product?.description || "",
-      price: product?.price || 0,
-      precio_de_oferta: product?.precio_de_oferta || "",
-      stock: product?.stock || 0,
-      subCategoryId: product?.subCategory?.id || "",
-      imagen: null as File | null,
+      name: initialData?.name || "",
+      price: String(initialData?.price ?? ""),
+      description: initialData?.description || "",
+      sub_category_id: initialData?.sub_category_id || "",
+      precio_de_oferta: initialData?.precio_de_oferta
+        ? String(initialData.precio_de_oferta)
+        : "",
+      stock: initialData?.stock ?? 1,
+      SKU: initialData?.SKU || "",
+      imagen: null,
     },
     validationSchema,
-    onSubmit: async (values) => {
-      try {
-        const formData = new FormData()
-        formData.append("name", values.name)
-        formData.append("description", values.description)
-        formData.append("price", values.price.toString())
-        if (values.precio_de_oferta) {
-          formData.append("precio_de_oferta", values.precio_de_oferta.toString())
-        }
-        formData.append("stock", values.stock.toString())
-        formData.append("subCategoryId", values.subCategoryId.toString())
-        if (values.imagen) {
-          formData.append("imagen", values.imagen)
-        }
+    enableReinitialize: true,
+    onSubmit: async (values, { resetForm }) => {
+      // Delete marked images first (only in edit mode)
+      if (initialData && imagesToDelete.length > 0) {
+        await Promise.allSettled(
+          imagesToDelete.map((imgId) =>
+            productService.deleteImage(initialData.id, imgId),
+          ),
+        );
+      }
 
-        await onSave(formData)
+      const formData = new FormData();
+      formData.append("name", values.name);
+      formData.append("price", values.price);
+      if (values.description) formData.append("description", values.description);
+      formData.append("sub_category_id", String(values.sub_category_id));
+      if (values.precio_de_oferta) {
+        formData.append("precio_de_oferta", values.precio_de_oferta);
+      }
+      formData.append("stock", String(values.stock));
+      if (values.SKU) formData.append("SKU", values.SKU);
+      if (values.imagen) {
+        formData.append("imagen", values.imagen);
+      }
+      // Extra images
+      for (const extra of extraImages) {
+        formData.append("images[]", extra.file);
+      }
+      try {
+        await onSubmit(formData);
+        resetForm();
+        setImagePreview(null);
+        setExtraImages([]);
+        setImagesToDelete([]);
+        onClose();
       } catch (error) {
-        console.error("Error al guardar el producto:", error)
+        console.error("Error saving:", error);
       }
     },
-  })
+  });
 
-  const handleImageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (file) {
-      formik.setFieldValue("imagen", file)
-      const reader = new FileReader()
-      reader.onload = (e) => {
-        setImagePreview(e.target?.result as string)
-      }
-      reader.readAsDataURL(file)
+  // Auto-generate SKU when name changes and SKU is empty
+  const handleGenerateSKU = () => {
+    if (formik.values.name.trim()) {
+      formik.setFieldValue("SKU", generateSKU(formik.values.name));
+    } else {
+      toast.warning("Escribe el nombre del producto primero");
     }
-  }
-
-  const removeImage = () => {
-    formik.setFieldValue("imagen", null)
-    setImagePreview(null)
-  }
-
-  const nextStep = () => {
-    if (currentStep < totalSteps) {
-      setCurrentStep(currentStep + 1)
-    }
-  }
-
-  const prevStep = () => {
-    if (currentStep > 1) {
-      setCurrentStep(currentStep - 1)
-    }
-  }
-
-  const canProceedToNext = () => {
-    switch (currentStep) {
-      case 1:
-        return formik.values.name && formik.values.description && !formik.errors.name && !formik.errors.description
-      case 2:
-        return formik.values.subCategoryId && !formik.errors.subCategoryId
-      case 3:
-        return formik.values.price && formik.values.stock !== undefined && !formik.errors.price && !formik.errors.stock && !formik.errors.precio_de_oferta
-      default:
-        return true
-    }
-  }
+  };
 
   useEffect(() => {
-    if (product?.imagen) {
-      setImagePreview(buildImageUrl(product.imagen))
+    if (isOpen && initialData?.imagen) {
+      setImagePreview(buildImageUrl(initialData.imagen));
+    } else if (!isOpen) {
+      setImagePreview(null);
+      setExtraImages([]);
+      setImagesToDelete([]);
     }
-  }, [product])
+  }, [isOpen, initialData]);
 
-  const renderStepContent = () => {
-    switch (currentStep) {
-      case 1:
-        return (
-          <div className="space-y-6">
-            <div className="text-center mb-8">
-              <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <FaInfoCircle className="text-2xl text-blue-600" />
-              </div>
-              <h3 className="text-xl font-semibold text-foreground mb-2">Información Básica</h3>
-              <p className="text-muted-foreground">Ingresa el nombre y descripción del producto</p>
-            </div>
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [isOpen]);
 
-            <div className="space-y-4">
-              <div>
-                <label htmlFor="name" className="block text-sm font-medium text-foreground mb-2">
-                  Nombre del Producto *
-                </label>
-                <input
-                  id="name"
-                  name="name"
-                  type="text"
-                  placeholder="Ej: Smartphone Samsung Galaxy"
-                  onChange={formik.handleChange}
-                  onBlur={formik.handleBlur}
-                  value={formik.values.name}
-                  className={`w-full px-4 py-3 border rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 ${
-                    formik.touched.name && formik.errors.name 
-                      ? 'border-red-500 bg-red-50' 
-                      : 'border-border bg-background hover:border-primary/50'
-                  }`}
-                />
-                {formik.touched.name && formik.errors.name && (
-                  <p className="text-red-500 text-sm mt-1">{formik.errors.name}</p>
-                )}
-              </div>
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const error = validateImageFile(file);
+      if (error) {
+        toast.error(error);
+        e.target.value = "";
+        return;
+      }
+      formik.setFieldValue("imagen", file);
+      const reader = new FileReader();
+      reader.onload = () => setImagePreview(reader.result as string);
+      reader.readAsDataURL(file);
+    }
+  };
 
-              <div>
-                <label htmlFor="description" className="block text-sm font-medium text-foreground mb-2">
-                  Descripción *
-                </label>
-                <textarea
-                  id="description"
-                  name="description"
-                  rows={4}
-                  placeholder="Describe las características principales del producto..."
-                  onChange={formik.handleChange}
-                  onBlur={formik.handleBlur}
-                  value={formik.values.description}
-                  className={`w-full px-4 py-3 border rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 resize-vertical ${
-                    formik.touched.description && formik.errors.description 
-                      ? 'border-red-500 bg-red-50' 
-                      : 'border-border bg-background hover:border-primary/50'
-                  }`}
-                />
-                {formik.touched.description && formik.errors.description && (
-                  <p className="text-red-500 text-sm mt-1">{formik.errors.description}</p>
-                )}
-              </div>
-            </div>
+  const handleExtraImages = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+    const newImages: { file: File; preview: string }[] = [];
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const error = validateImageFile(file);
+      if (error) {
+        toast.error(`${file.name}: ${error}`);
+        continue;
+      }
+      newImages.push({ file, preview: URL.createObjectURL(file) });
+    }
+    setExtraImages((prev) => [...prev, ...newImages]);
+    e.target.value = "";
+  };
+
+  const removeExtraImage = (index: number) => {
+    setExtraImages((prev) => {
+      URL.revokeObjectURL(prev[index].preview);
+      return prev.filter((_, i) => i !== index);
+    });
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        onClick={onClose}
+      />
+
+      <div className="relative z-10 max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-background p-6 shadow-2xl">
+        <button
+          onClick={onClose}
+          className="absolute right-3 top-3 rounded-full p-1.5 text-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
+          aria-label="Cerrar"
+        >
+          <X size={18} />
+        </button>
+
+        <h2 className="mb-6 text-xl font-bold text-foreground">
+          {initialData ? "Editar Producto" : "Nuevo Producto"}
+        </h2>
+
+        <form onSubmit={formik.handleSubmit} className="space-y-5">
+          {/* Name */}
+          <div>
+            <label
+              htmlFor="name"
+              className="mb-1.5 block text-sm font-medium text-foreground"
+            >
+              Nombre del producto *
+            </label>
+            <input
+              id="name"
+              name="name"
+              type="text"
+              value={formik.values.name}
+              onChange={formik.handleChange}
+              onBlur={formik.handleBlur}
+              className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+              placeholder="Ej: Ramo Hot Wheels Duo"
+            />
+            {formik.touched.name && formik.errors.name && (
+              <p className="mt-1 text-xs text-destructive">{formik.errors.name}</p>
+            )}
           </div>
-        )
 
-      case 2:
-        return (
-          <div className="space-y-6">
-            <div className="text-center mb-8">
-              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <FaTag className="text-2xl text-green-600" />
-              </div>
-              <h3 className="text-xl font-semibold text-foreground mb-2">Categorización</h3>
-              <p className="text-muted-foreground">Selecciona la categoría y subcategoría del producto</p>
-            </div>
-
-            <div>
-              <label htmlFor="subCategoryId" className="block text-sm font-medium text-foreground mb-2">
-                Subcategoría *
-              </label>
-              <select
-                id="subCategoryId"
-                name="subCategoryId"
-                onChange={formik.handleChange}
-                onBlur={formik.handleBlur}
-                value={formik.values.subCategoryId}
-                className={`w-full px-4 py-3 border rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 ${
-                  formik.touched.subCategoryId && formik.errors.subCategoryId 
-                    ? 'border-red-500 bg-red-50' 
-                    : 'border-border bg-background hover:border-primary/50'
-                }`}
-              >
-                <option value="">Seleccionar subcategoría</option>
-                {subcategories
-                  .sort((a, b) => {
-                    const catCompare = (a.category?.name || '').localeCompare(b.category?.name || '');
-                    if (catCompare !== 0) return catCompare;
-                    return a.name.localeCompare(b.name);
-                  })
-                  .map((subcategory) => (
-                    <option key={subcategory.id} value={subcategory.id}>
-                      {subcategory.name} ({subcategory.category?.name || 'Sin categoría'})
+          {/* Subcategory grouped */}
+          <div>
+            <label
+              htmlFor="sub_category_id"
+              className="mb-1.5 block text-sm font-medium text-foreground"
+            >
+              Categoría / Subcategoría *
+            </label>
+            <select
+              id="sub_category_id"
+              name="sub_category_id"
+              value={formik.values.sub_category_id}
+              onChange={formik.handleChange}
+              onBlur={formik.handleBlur}
+              className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+            >
+              <option value="">Seleccionar categoría y subcategoría</option>
+              {groupedSubcategories.map((group) => (
+                <optgroup key={group.category.id} label={group.category.name}>
+                  {group.subs.map((sub) => (
+                    <option key={sub.id} value={sub.id}>
+                      {sub.name}
                     </option>
                   ))}
-              </select>
-              {formik.touched.subCategoryId && formik.errors.subCategoryId && (
-                <p className="text-red-500 text-sm mt-1">{formik.errors.subCategoryId}</p>
+                </optgroup>
+              ))}
+            </select>
+            {formik.touched.sub_category_id &&
+              formik.errors.sub_category_id && (
+                <p className="mt-1 text-xs text-destructive">
+                  {formik.errors.sub_category_id}
+                </p>
+              )}
+          </div>
+
+          {/* Price + Offer price row */}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label
+                htmlFor="price"
+                className="mb-1.5 block text-sm font-medium text-foreground"
+              >
+                Precio (S/) *
+              </label>
+              <input
+                id="price"
+                name="price"
+                type="number"
+                step="0.01"
+                min="0"
+                value={formik.values.price}
+                onChange={formik.handleChange}
+                onBlur={formik.handleBlur}
+                className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                placeholder="0.00"
+              />
+              {formik.touched.price && formik.errors.price && (
+                <p className="mt-1 text-xs text-destructive">
+                  {formik.errors.price}
+                </p>
               )}
             </div>
-          </div>
-        )
-
-      case 3:
-        return (
-          <div className="space-y-6">
-            <div className="text-center mb-8">
-              <div className="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <FaDollarSign className="text-2xl text-yellow-600" />
-              </div>
-              <h3 className="text-xl font-semibold text-foreground mb-2">Precios y Stock</h3>
-              <p className="text-muted-foreground">Define el precio y la cantidad disponible</p>
+            <div>
+              <label
+                htmlFor="precio_de_oferta"
+                className="mb-1.5 block text-sm font-medium text-foreground"
+              >
+                Precio de Oferta (S/)
+                <span className="ml-1 text-xs text-muted-foreground">
+                  opcional
+                </span>
+              </label>
+              <input
+                id="precio_de_oferta"
+                name="precio_de_oferta"
+                type="number"
+                step="0.01"
+                min="0"
+                value={formik.values.precio_de_oferta}
+                onChange={formik.handleChange}
+                onBlur={formik.handleBlur}
+                className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                placeholder="Dejar vacío si no hay oferta"
+              />
             </div>
+          </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label htmlFor="price" className="block text-sm font-medium text-foreground mb-2">
-                  Precio Regular (S/) *
-                </label>
+          {/* Stock + SKU row */}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label
+                htmlFor="stock"
+                className="mb-1.5 block text-sm font-medium text-foreground"
+              >
+                Stock *
+              </label>
+              <input
+                id="stock"
+                name="stock"
+                type="number"
+                min="0"
+                step="1"
+                value={formik.values.stock}
+                onChange={formik.handleChange}
+                onBlur={formik.handleBlur}
+                className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                placeholder="1"
+              />
+              {formik.touched.stock && formik.errors.stock && (
+                <p className="mt-1 text-xs text-destructive">
+                  {formik.errors.stock}
+                </p>
+              )}
+            </div>
+            <div>
+              <label
+                htmlFor="SKU"
+                className="mb-1.5 block text-sm font-medium text-foreground"
+              >
+                SKU
+                <span className="ml-1 text-xs text-muted-foreground">
+                  opcional
+                </span>
+              </label>
+              <div className="flex gap-2">
                 <input
-                  id="price"
-                  name="price"
-                  type="number"
-                  step="0.01"
-                  placeholder="0.00"
+                  id="SKU"
+                  name="SKU"
+                  type="text"
+                  value={formik.values.SKU}
                   onChange={formik.handleChange}
                   onBlur={formik.handleBlur}
-                  value={formik.values.price}
-                  className={`w-full px-4 py-3 border rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 ${
-                    formik.touched.price && formik.errors.price 
-                      ? 'border-red-500 bg-red-50' 
-                      : 'border-border bg-background hover:border-primary/50'
-                  }`}
+                  className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                  placeholder="Se genera automáticamente"
                 />
-                {formik.touched.price && formik.errors.price && (
-                  <p className="text-red-500 text-sm mt-1">{formik.errors.price}</p>
-                )}
-              </div>
-
-              <div>
-                <label htmlFor="precio_de_oferta" className="block text-sm font-medium text-foreground mb-2">
-                  Precio de Oferta (S/)
-                  <span className="text-muted-foreground text-xs ml-1">(Opcional)</span>
-                </label>
-                <input
-                  id="precio_de_oferta"
-                  name="precio_de_oferta"
-                  type="number"
-                  step="0.01"
-                  placeholder="0.00"
-                  onChange={formik.handleChange}
-                  onBlur={formik.handleBlur}
-                  value={formik.values.precio_de_oferta}
-                  className={`w-full px-4 py-3 border rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 ${
-                    formik.touched.precio_de_oferta && formik.errors.precio_de_oferta 
-                      ? 'border-red-500 bg-red-50' 
-                      : 'border-border bg-background hover:border-primary/50'
-                  }`}
-                />
-                {formik.touched.precio_de_oferta && formik.errors.precio_de_oferta && (
-                  <p className="text-red-500 text-sm mt-1">{formik.errors.precio_de_oferta}</p>
-                )}
-              </div>
-
-              <div className="md:col-span-2">
-                <label htmlFor="stock" className="block text-sm font-medium text-foreground mb-2">
-                  Stock Disponible *
-                </label>
-                <input
-                  id="stock"
-                  name="stock"
-                  type="number"
-                  placeholder="0"
-                  onChange={formik.handleChange}
-                  onBlur={formik.handleBlur}
-                  value={formik.values.stock}
-                  className={`w-full px-4 py-3 border rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 ${
-                    formik.touched.stock && formik.errors.stock 
-                      ? 'border-red-500 bg-red-50' 
-                      : 'border-border bg-background hover:border-primary/50'
-                  }`}
-                />
-                {formik.touched.stock && formik.errors.stock && (
-                  <p className="text-red-500 text-sm mt-1">{formik.errors.stock}</p>
-                )}
+                <button
+                  type="button"
+                  onClick={handleGenerateSKU}
+                  className="flex h-10 shrink-0 items-center gap-1.5 rounded-lg border border-border bg-accent px-3 text-xs font-medium text-foreground transition-colors hover:bg-primary hover:text-primary-foreground"
+                  title="Generar SKU automáticamente"
+                >
+                  <Sparkles size={14} />
+                  Generar
+                </button>
               </div>
             </div>
           </div>
-        )
 
-      case 4:
-        return (
-          <div className="space-y-6">
-            <div className="text-center mb-8">
-              <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <FaImage className="text-2xl text-purple-600" />
-              </div>
-              <h3 className="text-xl font-semibold text-foreground mb-2">Imagen del Producto</h3>
-              <p className="text-muted-foreground">Sube una imagen representativa del producto</p>
-            </div>
+          {/* Description */}
+          <div>
+            <label
+              htmlFor="description"
+              className="mb-1.5 block text-sm font-medium text-foreground"
+            >
+              Descripción
+              <span className="ml-1 text-xs text-muted-foreground">
+                opcional
+              </span>
+            </label>
+            <textarea
+              id="description"
+              name="description"
+              rows={3}
+              value={formik.values.description}
+              onChange={formik.handleChange}
+              onBlur={formik.handleBlur}
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary resize-none"
+              placeholder="Describe el producto, materiales, contenido..."
+            />
+          </div>
 
-            <div className="space-y-4">
-              {!imagePreview ? (
-                <div className="border-2 border-dashed border-border rounded-lg p-8 text-center hover:border-primary/50 transition-colors">
-                  <FaUpload className="text-4xl text-muted-foreground mx-auto mb-4" />
-                  <p className="text-muted-foreground mb-4">Arrastra una imagen aquí o haz clic para seleccionar</p>
-                  <input
-                    id="imagen"
-                    name="imagen"
-                    type="file"
-                    accept="image/*"
-                    onChange={handleImageChange}
-                    className="hidden"
-                  />
-                  <label
-                    htmlFor="imagen"
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg cursor-pointer hover:bg-primary/90 transition-colors"
-                  >
-                    <FaUpload />
-                    Seleccionar Imagen
-                  </label>
-                </div>
-              ) : (
-                <div className="relative">
-                  <img 
-                    src={imagePreview} 
-                    alt="Vista previa" 
-                    className="w-full max-w-md mx-auto rounded-lg shadow-lg"
+          {/* Main image */}
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-foreground">
+              Imagen principal
+              {!initialData && (
+                <span className="ml-1 text-xs text-muted-foreground">
+                  recomendado
+                </span>
+              )}
+            </label>
+            <div className="flex items-start gap-4">
+              {imagePreview ? (
+                <div className="group relative h-28 w-28 shrink-0 overflow-hidden rounded-lg border border-border bg-muted">
+                  <Image
+                    src={imagePreview}
+                    alt="Preview"
+                    fill
+                    className="object-cover"
+                    sizes="112px"
                   />
                   <button
                     type="button"
-                    onClick={removeImage}
-                    className="absolute top-2 right-2 bg-red-500 text-white p-2 rounded-full hover:bg-red-600 transition-colors"
+                    onClick={() => {
+                      setImagePreview(null);
+                      formik.setFieldValue("imagen", null);
+                      if (fileInputRef.current) fileInputRef.current.value = "";
+                    }}
+                    className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 transition-opacity group-hover:opacity-100"
                   >
-                    <FaTrash />
+                    <Trash2 size={18} className="text-white" />
                   </button>
-                  <div className="mt-4 text-center">
-                    <input
-                      id="imagen-replace"
-                      name="imagen"
-                      type="file"
-                      accept="image/*"
-                      onChange={handleImageChange}
-                      className="hidden"
-                    />
-                    <label
-                      htmlFor="imagen-replace"
-                      className="inline-flex items-center gap-2 px-4 py-2 bg-secondary text-white rounded-lg cursor-pointer hover:bg-secondary/90 transition-colors"
-                    >
-                      <FaUpload />
-                      Cambiar Imagen
-                    </label>
-                  </div>
                 </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex h-28 w-28 shrink-0 flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed border-border text-muted-foreground transition-colors hover:border-primary hover:text-primary"
+                >
+                  <Upload size={22} />
+                  <span className="text-xs">Subir</span>
+                </button>
               )}
+              {imagePreview && (
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex items-center gap-2 rounded-lg border border-dashed border-border px-4 py-3 text-sm text-foreground/70 transition-colors hover:border-primary hover:bg-accent"
+                >
+                  <Upload size={16} />
+                  Cambiar
+                </button>
+              )}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/svg+xml,image/gif"
+                onChange={handleImageChange}
+                className="hidden"
+              />
             </div>
           </div>
-        )
 
-      default:
-        return null
-    }
-  }
-
-  return (
-    <div className="max-w-4xl mx-auto p-6 bg-card rounded-lg shadow-sm">
-      {/* Header */}
-      <div className="mb-8">
-        <h2 className="text-2xl font-bold text-foreground mb-2">
-          {product ? 'Editar Producto' : 'Crear Nuevo Producto'}
-        </h2>
-        <p className="text-muted-foreground">
-          Completa la información del producto paso a paso
-        </p>
-      </div>
-
-      {/* Progress Steps */}
-      <div className="mb-8">
-        <div className="flex items-center justify-between mb-4">
-          {steps.map((step, index) => (
-            <div key={step.id} className="flex items-center">
-              <div className={`flex items-center justify-center w-10 h-10 rounded-full border-2 transition-colors ${
-                currentStep >= step.id 
-                  ? 'bg-primary border-primary text-white' 
-                  : 'border-border text-muted-foreground'
-              }`}>
-                {currentStep > step.id ? <FaCheck /> : step.icon}
-              </div>
-              {index < steps.length - 1 && (
-                <div className={`flex-1 h-0.5 mx-4 transition-colors ${
-                  currentStep > step.id ? 'bg-primary' : 'bg-border'
-                }`} />
+          {/* Extra images */}
+          <div>
+            <div className="mb-1.5 flex items-center justify-between">
+              <label className="text-sm font-medium text-foreground">
+                Imágenes adicionales
+                <span className="ml-1 text-xs text-muted-foreground">
+                  opcional — galería del producto
+                </span>
+              </label>
+              {imagesToDelete.length > 0 && (
+                <span className="text-xs font-medium text-destructive">
+                  {imagesToDelete.length} imagen{imagesToDelete.length !== 1 ? "es" : ""} se eliminará{imagesToDelete.length !== 1 ? "n" : ""} al guardar
+                </span>
               )}
             </div>
-          ))}
-        </div>
-        <div className="flex justify-between text-sm">
-          {steps.map((step) => (
-            <span key={step.id} className={`font-medium ${
-              currentStep >= step.id ? 'text-primary' : 'text-muted-foreground'
-            }`}>
-              {step.title}
-            </span>
-          ))}
-        </div>
-      </div>
-
-      {/* Form Content */}
-      <form onSubmit={formik.handleSubmit}>
-        <div className="min-h-[400px] mb-8">
-          {renderStepContent()}
-        </div>
-
-        {/* Navigation Buttons */}
-        <div className="flex justify-between">
-          <div>
-            {currentStep > 1 && (
+            <div className="flex flex-wrap gap-3">
+              {/* Existing extra images (edit mode) */}
+              {initialData?.images?.map((img, i) => {
+                const imgId = typeof img === "string" ? null : img.id;
+                const imgPath = typeof img === "string" ? img : img.image_path;
+                const markedForDelete = imgId !== null && imagesToDelete.includes(imgId);
+                return (
+                  <div
+                    key={`existing-${i}`}
+                    className={`group relative h-20 w-20 shrink-0 overflow-hidden rounded-lg border bg-muted transition-opacity ${
+                      markedForDelete
+                        ? "border-destructive opacity-40"
+                        : "border-border"
+                    }`}
+                  >
+                    <Image
+                      src={buildImageUrl(imgPath)}
+                      alt={`Imagen ${i + 1}`}
+                      fill
+                      className="object-cover"
+                      sizes="80px"
+                    />
+                    {markedForDelete ? (
+                      /* Undo button */
+                      <button
+                        type="button"
+                        onClick={() =>
+                          imgId !== null &&
+                          setImagesToDelete((prev) =>
+                            prev.filter((id) => id !== imgId),
+                          )
+                        }
+                        className="absolute inset-0 flex items-center justify-center bg-destructive/30"
+                        title="Deshacer eliminación"
+                      >
+                        <span className="rounded bg-white/90 px-1.5 py-0.5 text-[10px] font-semibold text-destructive">
+                          DESHACER
+                        </span>
+                      </button>
+                    ) : (
+                      /* Delete button */
+                      <button
+                        type="button"
+                        onClick={() =>
+                          imgId !== null &&
+                          setImagesToDelete((prev) => [...prev, imgId])
+                        }
+                        className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 transition-opacity group-hover:opacity-100"
+                        title="Eliminar imagen"
+                      >
+                        <Trash2 size={16} className="text-white" />
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+              {/* New extra images */}
+              {extraImages.map((img, i) => (
+                <div
+                  key={`new-${i}`}
+                  className="group relative h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-border bg-muted"
+                >
+                  <Image
+                    src={img.preview}
+                    alt={`Nueva imagen ${i + 1}`}
+                    fill
+                    className="object-cover"
+                    sizes="80px"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeExtraImage(i)}
+                    className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 transition-opacity group-hover:opacity-100"
+                  >
+                    <X size={16} className="text-white" />
+                  </button>
+                </div>
+              ))}
+              {/* Add button */}
               <button
                 type="button"
-                onClick={prevStep}
-                className="flex items-center gap-2 px-6 py-3 border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-primary/50 transition-colors"
+                onClick={() => extraFilesRef.current?.click()}
+                className="flex h-20 w-20 shrink-0 flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed border-border text-muted-foreground transition-colors hover:border-primary hover:text-primary"
               >
-                <FaArrowLeft />
-                Anterior
+                <ImagePlus size={20} />
+                <span className="text-[10px]">Agregar</span>
               </button>
-            )}
+              <input
+                ref={extraFilesRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/svg+xml,image/gif"
+                multiple
+                onChange={handleExtraImages}
+                className="hidden"
+              />
+            </div>
           </div>
 
-          <div className="flex gap-3">
+          {/* Actions */}
+          <div className="flex justify-end gap-3 border-t border-border pt-4">
             <button
               type="button"
-              onClick={onCancel}
-              className="px-6 py-3 border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-red-500 hover:text-red-500 transition-colors"
+              onClick={onClose}
+              className="rounded-lg border border-border px-5 py-2.5 text-sm font-medium text-foreground/70 transition-colors hover:bg-accent"
             >
               Cancelar
             </button>
-
-            {currentStep < totalSteps ? (
-              <button
-                type="button"
-                onClick={nextStep}
-                disabled={!canProceedToNext()}
-                className="flex items-center gap-2 px-6 py-3 bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                Siguiente
-                <FaArrowRight />
-              </button>
-            ) : (
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                {isSubmitting ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    Guardando...
-                  </>
-                ) : (
-                  <>
-                    <FaCheck />
-                    {product ? 'Actualizar Producto' : 'Crear Producto'}
-                  </>
-                )}
-              </button>
-            )}
+            <button
+              type="submit"
+              disabled={formik.isSubmitting}
+              className="rounded-lg bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+            >
+              {initialData ? "Actualizar Producto" : "Crear Producto"}
+            </button>
           </div>
-        </div>
-      </form>
+        </form>
+      </div>
     </div>
-  )
+  );
 }
-
-export default ProductoForm

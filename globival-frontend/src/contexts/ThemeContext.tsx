@@ -1,6 +1,14 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+"use client";
 
-type Theme = 'light' | 'dark';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
+
+type Theme = "light" | "dark";
 
 interface ThemeContextType {
   theme: Theme;
@@ -10,47 +18,48 @@ interface ThemeContextType {
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
-// Duración de la transición en milisegundos
 const TRANSITION_DURATION = 300;
 
-export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [theme, setTheme] = useState<Theme>(() => {
-    // Check for saved theme preference or use system preference
-    const savedTheme = localStorage.getItem('theme');
-    if (savedTheme === 'dark' || savedTheme === 'light') {
-      return savedTheme;
-    }
-    
-    // Use system preference as fallback
-    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-  });
-  
-  // Estado para controlar si estamos en transición entre temas
+export function ThemeProvider({ children }: { children: ReactNode }) {
+  const [theme, setTheme] = useState<Theme>("light");
   const [isTransitioning, setIsTransitioning] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    // Update document class when theme changes
-    if (theme === 'dark') {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
+    const savedTheme = localStorage.getItem("theme");
+    if (savedTheme === "dark" || savedTheme === "light") {
+      setTheme(savedTheme);
+    } else if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
+      setTheme("dark");
     }
-    
-    // Save theme preference
-    localStorage.setItem('theme', theme);
-  }, [theme]);
+    setMounted(true);
+
+    // Listen for system preference changes
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    const handleChange = (e: MediaQueryListEvent) => {
+      const saved = localStorage.getItem("theme");
+      if (!saved) {
+        setTheme(e.matches ? "dark" : "light");
+      }
+    };
+    mediaQuery.addEventListener("change", handleChange);
+    return () => mediaQuery.removeEventListener("change", handleChange);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
+    if (theme === "dark") {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
+    localStorage.setItem("theme", theme);
+  }, [theme, mounted]);
 
   const toggleTheme = () => {
-    // Iniciar transición
     setIsTransitioning(true);
-    
-    // Cambiar el tema
-    setTheme(prevTheme => (prevTheme === 'light' ? 'dark' : 'light'));
-    
-    // Finalizar transición después de la duración establecida
-    setTimeout(() => {
-      setIsTransitioning(false);
-    }, TRANSITION_DURATION);
+    setTheme((prev) => (prev === "light" ? "dark" : "light"));
+    setTimeout(() => setIsTransitioning(false), TRANSITION_DURATION);
   };
 
   return (
@@ -58,12 +67,12 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       {children}
     </ThemeContext.Provider>
   );
-};
+}
 
-export const useTheme = (): ThemeContextType => {
+export function useTheme(): ThemeContextType {
   const context = useContext(ThemeContext);
-  if (context === undefined) {
-    throw new Error('useTheme must be used within a ThemeProvider');
+  if (!context) {
+    throw new Error("useTheme must be used within a ThemeProvider");
   }
   return context;
-};
+}

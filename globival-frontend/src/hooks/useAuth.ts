@@ -1,15 +1,9 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import { toast } from "react-toastify"
-import api from "../services/api"
-
-interface User {
-  id: number;
-  username: string;
-  email: string;
-  role: string;
-}
+import { useState, useEffect } from "react";
+import { toast } from "react-toastify";
+import api from "@/services/api";
+import type { User } from "@/types";
 
 interface LoginResponse {
   token: string;
@@ -24,69 +18,59 @@ interface AuthContextType {
   loading: boolean;
 }
 
-export const useAuth = (): AuthContextType => {
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
-  const [user, setUser] = useState<User | null>(null)
-  const [loading, setLoading] = useState(true)
+export function useAuth(): AuthContextType {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const token = localStorage.getItem("token")
+    const token = localStorage.getItem("token");
     if (token) {
-      // Por ahora, asumimos que si hay token, el usuario está autenticado
-      // En el futuro se puede implementar verificación de token
-      setIsAuthenticated(true)
-      // Intentamos recuperar información del usuario del localStorage si está disponible
-      const userData = localStorage.getItem("user")
+      setIsAuthenticated(true);
+      const userData = localStorage.getItem("user");
       if (userData) {
         try {
-          setUser(JSON.parse(userData))
+          setUser(JSON.parse(userData));
         } catch {
-          setUser(null)
+          setUser(null);
         }
       }
     } else {
-      setIsAuthenticated(false)
-      setUser(null)
+      setIsAuthenticated(false);
+      setUser(null);
     }
-    setLoading(false)
-  }, [])
+    setLoading(false);
+  }, []);
 
-  const login = async (email: string, password: string): Promise<boolean> => {
+  const login = async (
+    email: string,
+    password: string,
+  ): Promise<boolean> => {
     try {
       const response = await api.post<LoginResponse>("/login", {
         email,
         password,
-      })
-
-      const { token, user } = response.data
-
-      localStorage.setItem("token", token)
-      localStorage.setItem("user", JSON.stringify(user))
-      setIsAuthenticated(true)
-      setUser(user)
-
-      toast.success("Inicio de sesión exitoso")
-      return true
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : "Error de inicio de sesión"
-      toast.error(errorMessage)
-      return false
+      });
+      const { token, user } = response.data;
+      localStorage.setItem("token", token);
+      localStorage.setItem("user", JSON.stringify(user));
+      setIsAuthenticated(true);
+      setUser(user);
+      toast.success("Inicio de sesión exitoso");
+      return true;
+    } catch {
+      toast.error("Credenciales incorrectas");
+      return false;
     }
-  }
+  };
 
   const logout = () => {
-    localStorage.removeItem("token")
-    localStorage.removeItem("user")
-    setIsAuthenticated(false)
-    setUser(null)
-    toast.success("Sesión cerrada correctamente")
-  }
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    setIsAuthenticated(false);
+    setUser(null);
+    toast.success("Sesión cerrada correctamente");
+  };
 
-  return {
-    isAuthenticated,
-    user,
-    login,
-    logout,
-    loading,
-  }
+  return { isAuthenticated, user, login, logout, loading };
 }

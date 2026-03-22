@@ -1,0 +1,19 @@
+{
+  "name": "Globival Detalles - Regalos y Productos Personalizados",
+  "short_name": "Globival",
+  "description": "Tienda de regalos y productos personalizados. Encuentra el detalle perfecto para cada ocasión.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#ed7da0",
+  "orientation": "portrait-primary",
+  "categories": ["shopping", "lifestyle"],
+  "icons": [
+    {
+      "src": "/logo_globival.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
