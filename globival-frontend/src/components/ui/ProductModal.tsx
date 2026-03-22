@@ -5,7 +5,7 @@ import Image from "next/image";
 import { X, MessageCircle, ShoppingCart, Check } from "lucide-react";
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { buildImageUrl, BLUR_DATA_URL, BUSINESS } from "@/config/constants";
+import { buildImageUrl, getProductImages, BLUR_DATA_URL, BUSINESS } from "@/config/constants";
 import { useCart } from "@/contexts/CartContext";
 import type { Product } from "@/types";
 import { getSubCategory } from "@/types";
@@ -44,6 +44,12 @@ export default function ProductModal({
 
   const cart = useCart();
   const [addedToCart, setAddedToCart] = useState(false);
+  const [activeImg, setActiveImg] = useState(0);
+
+  // Reset active image when product changes
+  useEffect(() => {
+    setActiveImg(0);
+  }, [product?.id]);
 
   const handleAddToCart = () => {
     if (!product) return;
@@ -96,23 +102,53 @@ export default function ProductModal({
             </button>
 
             <div className="flex flex-col md:flex-row">
-              {/* Image */}
-              <div className="relative aspect-square w-full bg-muted md:w-1/2">
-                <Image
-                  src={buildImageUrl(product.imagen)}
-                  alt={product.name}
-                  fill
-                  className="object-cover"
-                  sizes="(max-width: 768px) 100vw, 50vw"
-                  placeholder="blur"
-                  blurDataURL={BLUR_DATA_URL}
-                />
-                {hasOffer && (
-                  <span className="absolute left-3 top-3 rounded-full bg-primary px-3 py-1 text-xs font-bold text-white">
-                    OFERTA
-                  </span>
-                )}
-              </div>
+              {/* Image gallery */}
+              {(() => {
+                const images = getProductImages(product);
+                return (
+                  <div className="relative w-full md:w-1/2">
+                    <div className="relative aspect-square bg-muted">
+                      <Image
+                        src={images[activeImg] || images[0]}
+                        alt={product.name}
+                        fill
+                        className="object-cover"
+                        sizes="(max-width: 768px) 100vw, 50vw"
+                        placeholder="blur"
+                        blurDataURL={BLUR_DATA_URL}
+                      />
+                      {hasOffer && (
+                        <span className="absolute left-3 top-3 rounded-full bg-primary px-3 py-1 text-xs font-bold text-white">
+                          OFERTA
+                        </span>
+                      )}
+                    </div>
+                    {images.length > 1 && (
+                      <div className="flex gap-1.5 overflow-x-auto p-2 bg-muted/50">
+                        {images.map((src, i) => (
+                          <button
+                            key={i}
+                            onClick={() => setActiveImg(i)}
+                            className={`relative h-14 w-14 shrink-0 overflow-hidden rounded-md border-2 transition-all ${
+                              i === activeImg
+                                ? "border-primary ring-1 ring-primary"
+                                : "border-transparent opacity-60 hover:opacity-100"
+                            }`}
+                          >
+                            <Image
+                              src={src}
+                              alt={`${product.name} ${i + 1}`}
+                              fill
+                              className="object-cover"
+                              sizes="56px"
+                            />
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* Details */}
               <div className="flex flex-1 flex-col justify-between p-6">

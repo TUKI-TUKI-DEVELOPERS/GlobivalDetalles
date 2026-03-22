@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { Formik, Form, Field, ErrorMessage } from "formik";
 import * as Yup from "yup";
 import { motion } from "framer-motion";
-import { Mail, Phone, User, Tag, List } from "lucide-react";
+import { Mail, Phone, User, Tag, List, MapPin } from "lucide-react";
 import { toast } from "react-toastify";
 import { contactService } from "@/services/api";
 import { BUSINESS } from "@/config/constants";
@@ -149,6 +149,20 @@ export default function ContactoPage() {
                   >
                     {BUSINESS.phoneDisplay}
                   </a>
+                </div>
+              </div>
+
+              <div className="flex items-start">
+                <div className="flex-shrink-0 h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                  <MapPin className="h-5 w-5 text-primary" />
+                </div>
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-foreground">
+                    Direccion
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    {BUSINESS.address}
+                  </p>
                 </div>
               </div>
             </div>

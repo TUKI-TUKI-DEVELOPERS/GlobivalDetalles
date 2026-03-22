@@ -124,6 +124,9 @@ export default function Footer() {
             &copy; {currentYear} Globival Detalles. Todos los derechos
             reservados.
           </p>
+          <p className="mt-2 text-xs text-muted-foreground/60">
+            Desarrollado por TukiTukiSolutions S.A.C
+          </p>
         </div>
       </nav>
     </footer>

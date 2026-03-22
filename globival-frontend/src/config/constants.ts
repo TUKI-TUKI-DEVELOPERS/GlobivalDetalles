@@ -56,3 +56,20 @@ export function buildImageUrl(path: string | null | undefined): string {
   if (path.startsWith("http")) return path;
   return `${IMAGE_BASE_URL}${path}`;
 }
+
+/** Get all images for a product (main + additional) */
+export function getProductImages(product: {
+  imagen?: string | null;
+  images?: Array<{ id: number; image_path: string; order: number } | string>;
+}): string[] {
+  const urls: string[] = [];
+  if (product.imagen) urls.push(buildImageUrl(product.imagen));
+  if (product.images && product.images.length > 0) {
+    for (const img of product.images) {
+      const path = typeof img === "string" ? img : img.image_path;
+      const url = buildImageUrl(path);
+      if (!urls.includes(url)) urls.push(url);
+    }
+  }
+  return urls.length > 0 ? urls : ["/placeholder.svg"];
+}

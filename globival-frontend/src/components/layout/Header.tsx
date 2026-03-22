@@ -132,7 +132,7 @@ export default function Header() {
   }, []);
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-border/40 bg-background/80 backdrop-blur-lg">
+    <header className={`sticky top-0 w-full border-b border-border/40 ${mobileMenuOpen ? 'z-50 bg-background' : 'z-40 bg-background/80 backdrop-blur-lg'}`}>
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 lg:px-8">
         {/* Logo */}
         <Link href="/" className="flex shrink-0 items-center gap-2">
@@ -322,32 +322,34 @@ export default function Header() {
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -10 }}
           transition={{ duration: 0.2 }}
-          className="fixed inset-0 top-16 z-50 bg-background lg:hidden"
+          className="fixed inset-x-0 top-16 bottom-0 z-50 overflow-y-auto border-t border-border bg-background lg:hidden"
+          style={{ backgroundColor: 'var(--background)' }}
           role="dialog"
           aria-modal="true"
           aria-label="Menú de navegación"
         >
-          <nav className="flex flex-col p-4" aria-label="Navegación principal móvil">
+          <nav className="flex flex-col gap-1 p-4" aria-label="Navegación principal móvil">
             {navLinks.map((link) => (
               <Link
                 key={link.href}
                 href={link.href}
                 onClick={() => setMobileMenuOpen(false)}
-                className={`rounded-lg px-4 py-3 text-lg font-medium transition-colors hover:bg-accent hover:text-foreground ${
+                className={`rounded-lg px-4 py-3 text-base font-medium transition-colors ${
                   pathname === link.href
-                    ? "bg-accent text-foreground"
-                    : "text-foreground/80"
+                    ? "bg-primary/10 text-primary"
+                    : "text-foreground/80 hover:bg-accent hover:text-foreground"
                 }`}
               >
                 {link.label}
               </Link>
             ))}
+            <div className="my-2 border-t border-border" />
             <button
               onClick={() => {
                 setMobileMenuOpen(false);
                 cart.open();
               }}
-              className="mt-2 flex w-full items-center gap-3 rounded-lg px-4 py-3 text-lg font-medium text-foreground/80 transition-colors hover:bg-accent hover:text-foreground"
+              className="flex w-full items-center gap-3 rounded-lg px-4 py-3 text-base font-medium text-foreground/80 transition-colors hover:bg-accent hover:text-foreground"
             >
               <ShoppingBag size={20} />
               Carrito {cart.count > 0 && `(${cart.count})`}
@@ -355,12 +357,13 @@ export default function Header() {
             <Link
               href="/login"
               onClick={() => setMobileMenuOpen(false)}
-              className="flex items-center gap-3 rounded-lg px-4 py-3 text-lg font-medium text-foreground/80 transition-colors hover:bg-accent hover:text-foreground"
+              className="flex items-center gap-3 rounded-lg px-4 py-3 text-base font-medium text-foreground/80 transition-colors hover:bg-accent hover:text-foreground"
             >
               <UserCircle size={20} />
               Iniciar Sesión
             </Link>
-            <div className="mt-4 border-t border-border pt-4">
+            <div className="my-2 border-t border-border" />
+            <div className="px-4">
               <ThemeToggle />
             </div>
           </nav>
